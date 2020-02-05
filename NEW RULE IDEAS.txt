@@ -1,0 +1,3 @@
+
+- FKS: check for nocheck, not for replication
+- Check Constraints: check for udf usage, nocheck

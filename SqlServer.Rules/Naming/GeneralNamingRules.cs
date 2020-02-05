@@ -47,6 +47,12 @@ namespace SqlServer.Rules.Performance
             var objectType = sqlObj.ObjectType.Name;
             var parentObj = sqlObj.GetParent(DacQueryScopes.All);
 
+            //ignore constraints in TVFNs as they cannot be named
+            if(string.IsNullOrWhiteSpace(name) && parentObj.ObjectType == TableValuedFunction.TypeClass)
+            {
+                return problems;
+            }
+
             if (string.IsNullOrWhiteSpace(name))
             {
                 problems.Add(new SqlRuleProblem($"{objectType} found without a name.", parentObj));

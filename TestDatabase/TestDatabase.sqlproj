@@ -102,6 +102,8 @@
     <Build Include="dbo\Stored Procedures\Procedure5.sql" />
     <Build Include="dbo\Tables\Table6.sql" />
     <Build Include="dbo\Stored Procedures\Procedure6.sql" />
+    <Build Include="dbo\Functions\fn_TableValuedFunction.sql" />
+    <Build Include="dbo\Stored Procedures\Procedure7.sql" />
   </ItemGroup>
   <ItemGroup>
     <RefactorLog Include="TestDatabase.refactorlog" />
