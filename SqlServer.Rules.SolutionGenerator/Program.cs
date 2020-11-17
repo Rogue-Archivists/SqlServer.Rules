@@ -89,8 +89,10 @@ namespace SqlServer.Rules.SolutionGenerator
                      where _comparer.Equals(i.ItemType, "SqlTarget")
                      select new ReportRequest
                      {
-                         InputPath = FixPath(p.DirectoryPath, Path.GetFileName(i.EvaluatedInclude)), //this needs the right configuration to be set when parsing the solution
-                                                                                                     //InputPath = i.EvaluatedInclude, //would love to go straight off the path, but it does not point to the right location in some cases.
+                         //this needs the right configuration to be set when parsing the solution
+                         InputPath = FixPath(p.DirectoryPath, Path.GetFileName(i.EvaluatedInclude)), 
+                         //InputPath = i.EvaluatedInclude, //would love to go straight off the path, but it does not point to the right location in some cases.
+
                          Solution = cmdParseResponse.Options.SolutionPath,
                          Suppress = p => Regex.IsMatch(p.Problem.RuleId, suppressTypesRegex, RegexOptions.IgnoreCase),
                          SuppressIssueTypes = p => Regex.IsMatch(p.RuleId, suppressTypesRegex, RegexOptions.IgnoreCase),
