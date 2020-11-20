@@ -19,7 +19,7 @@ namespace SqlServer.Rules.Design
     {
         public const string RuleId = Constants.RuleNameSpace + "SRD0047";
         public const string RuleDisplayName = "Avoid using columns that match other columns by name, but are different in type or size.";
-        private const string Message = "Avoid using columns ({0}) that match other columns by name in the database, but are different in type or size.";
+        private const string Message = "Column name {0} has {1} definition(s) accross {2} tables. The definition '{3}' differes from '{4}' by size or type";
 
         public MismatchedColumnsRule()
         {
@@ -56,20 +56,64 @@ namespace SqlServer.Rules.Design
                 ));
             }
 
-            //find all the columns that match by name but differ by data type or length....
-            var offenders = columnList.Where(x =>
-                columnList.Any(y =>
-                    !_comparer.Equals(x.TableName, y.TableName)
-                    && _comparer.Equals(x.ColumnName, y.ColumnName)
-                    && (
-                        !_comparer.Equals(x.DataType, y.DataType)
-                        || !_comparer.Equals(x.DataTypeParameters, y.DataTypeParameters)
-                    )
-                )
-            );
+            // condence information
+            var subAgg = columnList
+                .GroupBy(x => x, new KeyComparer() )
+                .Select(x => (x.Key.ColumnName, x.Key.DataTypeInfo, TableCount: x.Count()));
 
-            problems.AddRange(offenders
-                .Select(col => new SqlRuleProblem(string.Format(Message, col.ToString()), col.Table, col.Column)));
+            var ColumnNameStats = subAgg
+                .Join(subAgg
+                        .GroupBy(x => x.ColumnName, _comparer)
+                        .Select(grp => new
+                        {
+                            ColumnName = grp.Key,
+                            DefinitionCount = grp.Count(),
+                            TotalColumns = grp.Sum(x => x.TableCount),
+                            ModColumnCount = grp.Max(x => x.TableCount),
+                            ModeColumnInfo = grp.OrderByDescending(x => x.TableCount).FirstOrDefault().DataTypeInfo
+                        })
+                        .Where(x => x.DefinitionCount != 1)
+                        , x => x.ColumnName
+                        , y => y.ColumnName
+                         , (x, y) => new
+                         {
+                             x.ColumnName,
+                             x.DataTypeInfo,
+                             x.TableCount,
+                             y.DefinitionCount,
+                             y.TotalColumns,
+                             y.ModColumnCount,
+                             y.ModeColumnInfo
+                         }
+                )
+                .Where(x => x.ModColumnCount != x.TableCount);
+
+            var offenders = columnList
+                   .Join(ColumnNameStats
+                           , x => new { x.ColumnName, x.DataTypeInfo }
+                           , y => new { y.ColumnName, y.DataTypeInfo }
+                           , (x,y) =>
+                           new {
+                               x.Table,
+                               x.Column,
+                               x.TableName,
+                               x.ColumnName,
+                               x.DataTypeInfo,
+                               y.DefinitionCount,
+                               y.TableCount,
+                               y.TotalColumns,
+                               y.ModColumnCount,
+                               y.ModeColumnInfo
+                           }
+                        );
+
+            problems.AddRange( offenders
+                                .Select(col =>
+                                        new SqlRuleProblem(description: string.Format(Message, col.ColumnName, col.DefinitionCount.ToString(),
+                                                                                    col.TableCount, col.DataTypeInfo, col.ModeColumnInfo),
+                                                            modelElement: col.Table,
+                                                            fragment: col.Column)
+            ));
 
             return problems;
         }
@@ -83,6 +127,7 @@ namespace SqlServer.Rules.Design
             return string.Empty;
         }
 
+
         private class TableColumnInfo
         {
             public string TableName { get; set; }
@@ -92,9 +137,33 @@ namespace SqlServer.Rules.Design
             public ColumnDefinition Column { get; set; }
             public TSqlObject Table { get; set; }
 
+            public string DataTypeInfo
+            {
+               get
+                {
+                    return DataType +(string.IsNullOrEmpty(DataTypeParameters) ? string.Empty : "(" + DataTypeParameters.Replace("-1", "MAX") + ")");
+                }
+            }
+
             public override string ToString()
             {
-                return $"{ColumnName} {DataType}({DataTypeParameters.Replace("-1", "MAX")})";
+                return $"{ColumnName} {DataType}{DataTypeInfo}";
+            }
+        }
+
+        private class KeyComparer : IEqualityComparer<TableColumnInfo>
+        {
+
+            bool IEqualityComparer<TableColumnInfo>.Equals(TableColumnInfo x, TableColumnInfo y)
+            {
+                return x.ColumnName.Equals(y.ColumnName, StringComparison.InvariantCultureIgnoreCase) &&
+                                       x.DataTypeInfo.Equals(y.DataTypeInfo, StringComparison.InvariantCultureIgnoreCase);
+            }
+
+            int IEqualityComparer<TableColumnInfo>.GetHashCode(TableColumnInfo obj)
+            {
+                int hash = (obj.ColumnName.GetHashCode() * 397);
+                return hash ^ (obj.DataTypeInfo.GetHashCode());
             }
         }
     }
